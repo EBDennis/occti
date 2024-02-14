@@ -144,31 +144,25 @@ fit_occ <- function(spp,
     length(attr(terms(formula(detformula)),"term.labels"))+2
     if(is.null(prev_start)){
         # If starting values not provided then try zeros and two other random starts
-        starts[[1]] <- rep(0, nparam)
+             starts[[1]] <- rep(0, nparam)
+          } else {
+             starts[[1]] <- prev_start
+          }
         occfit[["f1"]] <- try(occu(formula(paste(detformula, occformula, sep="")),
                                    starts = starts[[1]],
                                    dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-        if(nstart > 1){
+      if(nstart > 1){
         for(istart in 2:nstart){
-          starts[[istart]] <- runif(nparam, -1., .1)
+          if(is.null(prev_start)){
+                starts[[istart]] <- runif(nparam, -2., .2)
+              } else {
+                starts[[istart]] <- prev_start + runif(nparam, -1, 1)*prev_start*.2
+              }
           occfit[[paste0("f",istart)]] <- try(occu(formula(paste(detformula, occformula, sep="")),
                                             starts = starts[[istart]],
                                            dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
         }}
-   } else {
-        # If starting values are provided then try these and two other random starts by adding/taking away up to 10% from the previous starts
-        starts[[1]] <- prev_start
-        occfit[["f1"]] <-  try(occu(formula(paste(detformula, occformula, sep="")),
-                                    starts = starts[[1]],
-                                    dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-        if(nstart > 1){
-          for(istart in 2:nstart){
-              starts[[istart]] <- prev_start + runif(nparam, -1, 1)*prev_start*.1
-              occfit[[paste0("f",istart)]] <-  try(occu(formula(paste(detformula, occformula, sep="")),
-                                          starts = starts[[istart]],
-                                          dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-             }}
-   }
+
       aicsk <- rep(NA, length(occfit))
       for(i in 1:length(occfit)){
         if(class(occfit[[i]])[1] =="try-error" ||
@@ -235,7 +229,7 @@ fit_occ <- function(spp,
                          nstart = nstart,
                          beststart=best,
                          nstartNA = sum(is.na(aicsk$AIC)),
-                         naic = uniqueN(round(aicsk$AIC, 1)))
+                         naic = uniqueN(round(aicsk[!is.na(aicsk$AIC),]$AIC, 1)))
 
         z <- rbind(z, z1)
 
