@@ -28,7 +28,7 @@ fit_occ <- function(spp,
                     qu = FALSE,
                     qval = NULL,
                     outputdir = NULL,
-                    multistart = FALSE,
+                    nstart = 1,
                     printprogress = FALSE,
                     prev_start = NULL,
                     engine = engine,
@@ -74,7 +74,7 @@ fit_occ <- function(spp,
   #==================================================================
   if(is.null(years))  years <- sort(unique(obdata[obdata$Species == spp,]$Year))
   #years <- sort(unique(obdata[Species == spp]$Year))
-  months <- coefs <- z <- NULL
+  months <- coefs <- z <- aics <- NULL
   for(kyear in  rev(years)){
     #for(kyear in  c(rev(head(years,-1)),tail(years,1))){
     m <- 0
@@ -138,89 +138,60 @@ fit_occ <- function(spp,
                                siteCovs = obdatak1tEN)
 
     # Fit occupancy model
-    if(multistart){
-      occfit <- starts <- list()
-      nparam <- length(attr(terms(formula(occformula)),"term.labels"))+
-        length(attr(terms(formula(detformula)),"term.labels"))+2
-      if(is.null(prev_start)){
+    # if(multistart){
+    occfit <- starts <- list()
+    nparam <- length(attr(terms(formula(occformula)),"term.labels"))+
+    length(attr(terms(formula(detformula)),"term.labels"))+2
+    if(is.null(prev_start)){
         # If starting values not provided then try zeros and two other random starts
         starts[[1]] <- rep(0, nparam)
         occfit[["f1"]] <- try(occu(formula(paste(detformula, occformula, sep="")),
                                    starts = starts[[1]],
                                    dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-        starts[[2]] <- runif(nparam, -1., .1)
-        occfit[["f2"]] <- try(occu(formula(paste(detformula, occformula, sep="")),
-                                   starts = starts[[2]],
-                                   dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-        starts[[3]] <- runif(nparam, -1., .1)
-        occfit[["f3"]] <- try(occu(formula(paste(detformula, occformula, sep="")),
-                                   starts = starts[[3]],
-                                   dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-      } else {
+        if(nstart > 1){
+        for(istart in 2:nstart){
+          starts[[istart]] <- runif(nparam, -1., .1)
+          occfit[[paste0("f",istart)]] <- try(occu(formula(paste(detformula, occformula, sep="")),
+                                            starts = starts[[istart]],
+                                           dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
+        }}
+   } else {
         # If starting values are provided then try these and two other random starts by adding/taking away up to 10% from the previous starts
         starts[[1]] <- prev_start
         occfit[["f1"]] <-  try(occu(formula(paste(detformula, occformula, sep="")),
                                     starts = starts[[1]],
                                     dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-        starts[[2]] <- prev_start + runif(nparam, -1, 1)*prev_start*.1
-        occfit[["f2"]] <-  try(occu(formula(paste(detformula, occformula, sep="")),
-                                    starts = starts[[2]],
-                                    dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-        starts[[3]] <- prev_start + runif(nparam, -1, 1)*prev_start*.1
-        occfit[["f3"]] <-  try(occu(formula(paste(detformula, occformula, sep="")),
-                                    starts = starts[[3]],
-                                    dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-      }
-
-      aics <- rep(NA, length(occfit))
+        if(nstart > 1){
+          for(istart in 2:nstart){
+              starts[[istart]] <- prev_start + runif(nparam, -1, 1)*prev_start*.1
+              occfit[[paste0("f",istart)]] <-  try(occu(formula(paste(detformula, occformula, sep="")),
+                                          starts = starts[[istart]],
+                                          dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
+             }}
+   }
+      aicsk <- rep(NA, length(occfit))
       for(i in 1:length(occfit)){
         if(class(occfit[[i]])[1] =="try-error" ||
            class(try(unmarked::vcov(occfit[[i]]), silent = TRUE))[1] == "try-error" ||
            min(diag(unmarked::vcov(occfit[[i]]))) < 0 ||
            min(eigen(unmarked::vcov(occfit[[i]], type="state"))$values) < 0){
           #occfit[[i]] <- NULL
-          aics[i] <- NA
+          aicsk[i] <- NA
         } else {
-          aics[i] <- occfit[[i]]@AIC
+          aicsk[i] <- occfit[[i]]@AIC
         }
       }
-      # If null for all 3 starts tried then skip this year
-      if(all(is.na(aics))) next()
+      # If null for all starts tried then skip this year
+      if(all(is.na(aicsk))) next()
       # Save the best model in terms of aic
-      best <- which(aics == min(aics, na.rm=TRUE)[1])
+      best <- which(aicsk == min(aicsk, na.rm=TRUE)[1])
       occfit <- occfit[[best]]
       beststarts <- starts[[best]]
-    } else {
-      best <- 1
-      if(!is.null(prev_start)){
-        time <- system.time(occfit <- try(occu(formula(paste(detformula, occformula, sep="")),
-                                               starts = prev_start,
-                                               dataf, control=list(maxit=1000)), silent=TRUE))
 
-      } else {
-        time <- system.time(occfit <- try(occu(formula(paste(detformula, occformula, sep="")),
-                                               dataf, control=list(maxit=1000)), silent=TRUE))
-      }
+      aicsk <- data.frame(Year = kyear, start = 1:nstart, AIC = aicsk)
+      aics <- rbind(aics, aicsk)
 
-      if(class(occfit)[1] =="try-error" ||
-         class(try(unmarked::vcov(occfit), silent = TRUE))[1] == "try-error" ||
-         min(diag(unmarked::vcov(occfit))) < 0 ||
-         min(eigen(unmarked::vcov(occfit, type="state"))$values) < 0){
-        best <- 2
-        time <- system.time(occfit <- try(occu(formula(paste(detformula, occformula, sep="")), dataf,
-                                               starts=rep(-1,length(attr(terms(formula(occformula)),"term.labels"))+
-                                                            length(attr(terms(formula(detformula)),"term.labels"))+2),
-                                               control=list(maxit=1000)), silent=TRUE))
 
-        if(class(occfit)[1] =="try-error" ||
-           class(try(unmarked::vcov(occfit), silent = TRUE))[1] == "try-error" ||
-           min(diag(unmarked::vcov(occfit))) < 0 ||
-           min(eigen(unmarked::vcov(occfit, type="state"))$values) < 0){
-          occfit <- NULL
-        }
-      }
-
-    }
     # Error checking
     #==================================================================
 
@@ -248,7 +219,6 @@ fit_occ <- function(spp,
         `logit` <- function(x){ log(x/(1-x)) }
 
         z1 <- data.frame(Year = kyear,
-                         #Time = ifelse(multistart, time[[best]][3],time[3]),
                          psi = plogis(unmarked::coef(occfit)[1]),
                          psiA = I,
                          psiA_L = plogis(logit(I) - 1.96*sqrt(psi_var_logit)),
@@ -262,7 +232,10 @@ fit_occ <- function(spp,
                          nSquares = length(unique(subset(obdatak, Species == spp)$Gridref)),
                          month_min = month1,
                          month_max = month2,
-                         best=best)
+                         nstart = nstart,
+                         beststart=best,
+                         nstartNA = sum(is.na(aicsk$AIC)),
+                         naic = uniqueN(round(aicsk$AIC, 1)))
 
         z <- rbind(z, z1)
 
@@ -271,6 +244,7 @@ fit_occ <- function(spp,
                                          Est = unmarked::coef(occfit),
                                          SE = SE(occfit),
                                          starts = beststarts))
+
         #setDT(coefs)
         #coefsm <- coefs[, .(Est = mean(Est)), by = Coef]
         #prev_start <- coefsm$Est
@@ -291,7 +265,9 @@ fit_occ <- function(spp,
                   minyear = minyear,
                   maxyear = maxyear,
                   months = months,
-                  qval=qval)
+                  qval=qval,
+                  nstart = nstart,
+                  aics = aics)
   } else {
     z <- rbind(prev_output$Index[!prev_output$Index$Year %in% years,], z)
 
