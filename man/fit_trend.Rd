@@ -12,6 +12,8 @@ fit_trend(startyear, z, endyear = NULL, predictions = FALSE)
 \item{z}{Data frame output from \code{fit_occ}, containing estimated occupancy index and standard errors.}
 
 \item{endyear}{Optional. Year to calculate the trend up to. Default will select the last year of the index.}
+
+\item{predictions}{Option to include predicted values in the output e.g. for plotting.}
 }
 \description{
 Function to estimate occupancy trends
