@@ -94,11 +94,17 @@ fit_occ <- function(spp,
     if(nrow(subset(obdatak, Species==spp))==0) next()
 
     # Limit to species months
-    month1 <- if(!qu){min(obdatak[obdatak$Species == spp,]$Month)} else{floor(quantile(obdatak[obdatak$Species == spp,]$Month, qval))}
-    month2 <- if(!qu){max(obdatak[obdatak$Species == spp,]$Month)} else {ceiling(quantile(obdatak[obdatak$Species == spp,]$Month, 1-qval))}
-    #month1 <- if(!qu){min(obdatak[Species == spp]$Month)} else{floor(quantile(obdatak[Species == spp]$Month, qval))}
-    #month2 <- if(!qu){max(obdatak[Species == spp]$Month)} else {ceiling(quantile(obdatak[Species == spp]$Month, 1-qval))}
-    months <- rbind(months, data.frame(Year=kyear,
+    month1 <- if(is.null(qval)){
+                    min(obdatak[obdatak$Species == spp,]$Month)
+                   } else {
+                    floor(quantile(obdatak[obdatak$Species == spp,]$Month, qval))
+                     }
+    month2 <- if(is.null(qval)){
+                    max(obdatak[obdatak$Species == spp,]$Month)
+                   } else {
+                    ceiling(quantile(obdatak[obdatak$Species == spp,]$Month, 1 - qval))
+                     }
+  months <- rbind(months, data.frame(Year=kyear,
                                        min=month1,
                                        max=month2))
     obdatak <- obdatak[obdatak$Month %in% month1:month2,]
