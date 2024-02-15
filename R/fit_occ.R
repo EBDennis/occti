@@ -244,7 +244,7 @@ fit_occ <- function(spp,
                          irun = irun)
 
         if(!is.null(irun))
-            z$irun <- irun
+            z1$irun <- irun
 
         z <- rbind(z, z1)
 
@@ -278,7 +278,7 @@ fit_occ <- function(spp,
                   nstart = nstart,
                   aics = aics)
     if(!is.null(irun))
-      reusults$irun <- irun
+      results$irun <- irun
   } else {
     z <- rbind(prev_output$Index[!prev_output$Index$Year %in% years,], z)
 
