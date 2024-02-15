@@ -2,21 +2,11 @@
 #'@param startyear First year to calculate the trend from
 #'@param z Data frame output from \code{fit_occ}, containing estimated occupancy index and standard errors.
 #'@param endyear Optional. Year to calculate the trend up to. Default will select the last year of the index.
+#'@param predictions Option to include predicted values in the output e.g. for plotting.
 #'@export
 
 # Estimate trends
 fit_trend <- function(startyear, z, endyear=NULL, predictions = FALSE){
-
-  expit <- function(x){ exp(x)/(1+exp(x)) }
-  pcfunc <- function(pred){(tail(pred,1)-head(pred,1))/head(pred,1)*100}
-  pcfunc2 <- function(pred1,pred2){(pred2-pred1)/pred1*100}
-
-
-  sigfunc <- function(x){y <- ""; if(x <= 0.05) y <- "*";
-  if(x <= 0.01) y <- "**";
-  if(x <= 0.001) y <- "***";
-  return(y)}
-
 
   if(quantile(z$psiA, .9, na.rm=TRUE) < .9){
     z <- subset(z, psiA < .99)
@@ -68,4 +58,13 @@ fit_trend <- function(startyear, z, endyear=NULL, predictions = FALSE){
 }
 
 
+# Trend utility functions
+expit <- function(x){ exp(x)/(1+exp(x)) }
+pcfunc <- function(pred){(tail(pred,1)-head(pred,1))/head(pred,1)*100}
+pcfunc2 <- function(pred1,pred2){(pred2-pred1)/pred1*100}
+
+sigfunc <- function(x){y <- ""; if(x <= 0.05) y <- "*";
+  if(x <= 0.01) y <- "**";
+  if(x <= 0.001) y <- "***";
+  return(y)}
 

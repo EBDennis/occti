@@ -6,28 +6,29 @@
 #' Function to fit the occupancy models}
 \usage{
 fit_occ_ms(
-  ispp,
+  splist,
   obdata,
   occformula = "~North+I(North^2)+East+I(East^2)",
   detformula = "~logLL+SEAS",
   covnames = c("East", "North"),
   parallel = FALSE,
   cpus = NULL,
+  seed = NULL,
   minyear = NULL,
   maxyear = NULL,
   trendyears = NULL,
+  nstart = 3,
+  nrun = 1,
   allsites = NULL,
-  qu = FALSE,
-  qval = NULL,
-  outputdir = NULL,
-  multistart = FALSE,
-  printprogress = FALSE,
+  qval = 0.025,
   prev_start = NULL,
-  engine = "R"
+  outputdir = NULL,
+  printprogress = FALSE,
+  engine = "C"
 )
 }
 \arguments{
-\item{ispp}{Vector of target species to model}
+\item{splist}{Vector of target species to model}
 
 \item{obdata}{Data frame containing species occurrence records with the following columns: Species, Date, Gridref, Year, Week, Month, and optionally covnames (see below) and listL}
 
@@ -41,13 +42,29 @@ fit_occ_ms(
 
 \item{cpus}{Optional specification for the number of cpus when \code{parallel = TRUE}. Otherwise chosen based on cores available and the number of species.}
 
-\item{minyear}{First year of interest}
+\item{seed}{Option random seed value to set}
 
-\item{maxyear}{Last year of interest}
+\item{minyear}{Optional filter to first year of interest}
+
+\item{maxyear}{Optional filter to last year of interest}
 
 \item{trendyears}{Vector of start years for trend estimation. If \code{trendyears = NULL} then no trends will be calculated.}
 
-\item{outputdir}{Directory for output files}
+\item{nstart}{Number of starting values to run. Default \code{nstart = 3}.}
+
+\item{nrun}{Optional number of runs (since starting values are based on preceding year). Default \code{nrun = NULL} produces one run.}
+
+\item{allsites}{Optional data frame of sites for which the occupancy index will be calculated for.}
+
+\item{qval}{Quantile value to filter records to months where the species was observed. Default \code{qval = 0.025}.}
+
+\item{prev_start}{Provide starting values e.g. based on outputs of a previous run.}
+
+\item{outputdir}{Optional directory to save output files to.}
+
+\item{printprogress}{print the progress of the run (only available for non-parallel option)}
+
+\item{engine}{Choose the engine used by unmarked.}
 }
 \value{
 A list containing various outputs

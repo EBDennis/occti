@@ -1,7 +1,7 @@
 Package: occti
 Type: Package
 Title: Species Occupancy Trends and Indices
-Version: 0.1.0
+Version: 0.2.0
 Author: E.B.Dennis
 Maintainer: Emily B. Dennis <edennis@butterfly-conservation.org>
 Description: More about what it does (maybe more than one line)
@@ -21,4 +21,4 @@ Imports:
   unmarked,
 Suggests:
   lubridate
-RoxygenNote: 6.0.1
+RoxygenNote: 7.3.0

@@ -10,19 +10,18 @@ fit_occ(
   occformula = "~North+I(North^2)+East+I(East^2)",
   detformula = "~logLL+SEAS",
   covnames = c("East", "North"),
-  years = NULL,
   minyear = NULL,
   maxyear = NULL,
   trendyears = NULL,
+  nstart = 1,
   allsites = NULL,
-  qu = FALSE,
   qval = NULL,
-  outputdir = NULL,
-  multistart = FALSE,
-  printprogress = FALSE,
   prev_start = NULL,
+  outputdir = NULL,
+  printprogress = FALSE,
   engine = engine,
-  prev_output = NULL
+  prev_output = NULL,
+  irun = 0
 )
 }
 \arguments{
@@ -42,7 +41,21 @@ fit_occ(
 
 \item{trendyears}{Vector of start years for trend estimation. If \code{trendyears = NULL} then no trends will be calculated.}
 
-\item{outputdir}{Directory for output files}
+\item{nstart}{Number of starting values to run. Default \code{nstart = 3}.}
+
+\item{allsites}{Optional data frame of sites for which the occupancy index will be calculated for.}
+
+\item{qval}{Quantile value to filter records to months where the species was observed. Default \code{qval = 0.025}.}
+
+\item{prev_start}{Provide starting values e.g. based on outputs of a previous run.}
+
+\item{outputdir}{Optional directory to save output files to.}
+
+\item{printprogress}{Print the progress of the run (only available for non-parallel option)}
+
+\item{engine}{Choose the engine used by unmarked.}
+
+\item{prev_output}{Previous output to append.}
 }
 \value{
 A list containing various outputs

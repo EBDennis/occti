@@ -8,7 +8,14 @@
 #'@param minyear First year of interest
 #'@param maxyear Last year of interest
 #'@param trendyears Vector of start years for trend estimation. If \code{trendyears = NULL} then no trends will be calculated.
-#'@param outputdir Directory for output files
+#'@param nstart Number of starting values to run. Default \code{nstart = 3}.
+#'@param allsites Optional data frame of sites for which the occupancy index will be calculated for.
+#'@param qval Quantile value to filter records to months where the species was observed. Default \code{qval = 0.025}.
+#'@param prev_start Provide starting values e.g. based on outputs of a previous run.
+#'@param outputdir Optional directory to save output files to.
+#'@param printprogress Print the progress of the run (only available for non-parallel option)
+#'@param engine Choose the engine used by unmarked.
+#'@param prev_output Previous output to append.
 #'@return A list containing various outputs
 #'@import data.table
 #'@import unmarked
@@ -20,20 +27,18 @@ fit_occ <- function(spp,
                     occformula = "~North+I(North^2)+East+I(East^2)",
                     detformula = "~logLL+SEAS",
                     covnames = c("East","North"),
-                    years = NULL,
                     minyear = NULL,
                     maxyear = NULL,
                     trendyears = NULL,
+                    nstart = 1,
                     allsites = NULL,
-                    qu = FALSE,
                     qval = NULL,
-                    outputdir = NULL,
-                    multistart = FALSE,
-                    printprogress = FALSE,
                     prev_start = NULL,
+                    outputdir = NULL,
+                    printprogress = FALSE,
                     engine = engine,
-                    prev_output = NULL){
-  #cat(spp,"at",base::date(),"\n", file=if(parallel){paste("./Logs/",spp,"_",minyear,"_",maxyear,"_log",res,".txt",sep="")}else{""}, append=TRUE)
+                    prev_output = NULL,
+                    irun = 0){
 
   # Satisfy not finding global variable
   Year <- Species <- Week <- N <- NULL
@@ -47,13 +52,13 @@ fit_occ <- function(spp,
   if(!("listL" %in% colnames(obdata))) obdata <- add_listL(obdata)
 
   if(is.null(allsites)) # allsites <- unique(select(obdata, c("Gridref", covnames)))
-    allsites <- unique(obdata[,c("Gridref",covnames), with=FALSE])
+    allsites <- unique(obdata[, c("Gridref", covnames), with=FALSE])
 
   st1 <- Sys.time()
   # Data prep
   #==================================================================
-  obdata <- filter(obdata, Year %in%  minyear:maxyear)
-  #obdata <- obdata[Year %in%  minyear:maxyear]
+  #obdata <- filter(obdata, Year %in%  minyear:maxyear)
+  obdata <- obdata[obdata$Year %in%  minyear:maxyear,]
 
   # Calculate seasonal variation across years
   obdata_sp <- filter(obdata, Species == spp)
@@ -72,11 +77,9 @@ fit_occ <- function(spp,
 
   # Loop over years
   #==================================================================
-  if(is.null(years))  years <- sort(unique(obdata[obdata$Species == spp,]$Year))
-  #years <- sort(unique(obdata[Species == spp]$Year))
-  months <- coefs <- z <- NULL
+  years <- sort(unique(obdata[obdata$Species == spp,]$Year))
+  months <- coefs <- z <- aics <- NULL
   for(kyear in  rev(years)){
-    #for(kyear in  c(rev(head(years,-1)),tail(years,1))){
     m <- 0
     if(printprogress)cat(spp,"for",kyear,"at",base::date(),"\n")
 
@@ -94,11 +97,17 @@ fit_occ <- function(spp,
     if(nrow(subset(obdatak, Species==spp))==0) next()
 
     # Limit to species months
-    month1 <- if(!qu){min(obdatak[obdatak$Species == spp,]$Month)} else{floor(quantile(obdatak[obdatak$Species == spp,]$Month, qval))}
-    month2 <- if(!qu){max(obdatak[obdatak$Species == spp,]$Month)} else {ceiling(quantile(obdatak[obdatak$Species == spp,]$Month, 1-qval))}
-    #month1 <- if(!qu){min(obdatak[Species == spp]$Month)} else{floor(quantile(obdatak[Species == spp]$Month, qval))}
-    #month2 <- if(!qu){max(obdatak[Species == spp]$Month)} else {ceiling(quantile(obdatak[Species == spp]$Month, 1-qval))}
-    months <- rbind(months, data.frame(Year=kyear,
+    month1 <- if(is.null(qval)){
+                    min(obdatak[obdatak$Species == spp,]$Month)
+                   } else {
+                    floor(quantile(obdatak[obdatak$Species == spp,]$Month, qval))
+                     }
+    month2 <- if(is.null(qval)){
+                    max(obdatak[obdatak$Species == spp,]$Month)
+                   } else {
+                    ceiling(quantile(obdatak[obdatak$Species == spp,]$Month, 1 - qval))
+                     }
+  months <- rbind(months, data.frame(Year=kyear,
                                        min=month1,
                                        max=month2))
     obdatak <- obdatak[obdatak$Month %in% month1:month2,]
@@ -125,6 +134,8 @@ fit_occ <- function(spp,
                                                                 "Gridref", function(a){matrix(a$N, nrow=1)}))
     obdatak1tEN <- unique(obdatak1[,c("Gridref", covnames), with=FALSE])
 
+    obdatak1tEN$Gridref <- as.factor(obdatak1tEN$Gridref)
+
     # Reduce max no. visits to 50
     if(ncol(obdatak1t) > 50){
       obdatak1t <- obdatak1t[,1:50]
@@ -138,89 +149,54 @@ fit_occ <- function(spp,
                                siteCovs = obdatak1tEN)
 
     # Fit occupancy model
-    if(multistart){
-      occfit <- starts <- list()
-      nparam <- length(attr(terms(formula(occformula)),"term.labels"))+
-        length(attr(terms(formula(detformula)),"term.labels"))+2
-      if(is.null(prev_start)){
+    # if(multistart){
+    occfit <- starts <- list()
+    nparam <- length(attr(terms(formula(occformula)),"term.labels"))+
+    length(attr(terms(formula(detformula)),"term.labels"))+2
+    if(is.null(prev_start)){
         # If starting values not provided then try zeros and two other random starts
-        starts[[1]] <- rep(0, nparam)
+             starts[[1]] <- rep(0, nparam)
+          } else {
+             starts[[1]] <- prev_start
+          }
         occfit[["f1"]] <- try(occu(formula(paste(detformula, occformula, sep="")),
                                    starts = starts[[1]],
                                    dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-        starts[[2]] <- runif(nparam, -1., .1)
-        occfit[["f2"]] <- try(occu(formula(paste(detformula, occformula, sep="")),
-                                   starts = starts[[2]],
-                                   dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-        starts[[3]] <- runif(nparam, -1., .1)
-        occfit[["f3"]] <- try(occu(formula(paste(detformula, occformula, sep="")),
-                                   starts = starts[[3]],
-                                   dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-      } else {
-        # If starting values are provided then try these and two other random starts by adding/taking away up to 10% from the previous starts
-        starts[[1]] <- prev_start
-        occfit[["f1"]] <-  try(occu(formula(paste(detformula, occformula, sep="")),
-                                    starts = starts[[1]],
-                                    dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-        starts[[2]] <- prev_start + runif(nparam, -1, 1)*prev_start*.1
-        occfit[["f2"]] <-  try(occu(formula(paste(detformula, occformula, sep="")),
-                                    starts = starts[[2]],
-                                    dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-        starts[[3]] <- prev_start + runif(nparam, -1, 1)*prev_start*.1
-        occfit[["f3"]] <-  try(occu(formula(paste(detformula, occformula, sep="")),
-                                    starts = starts[[3]],
-                                    dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-      }
+      if(nstart > 1){
+        for(istart in 2:nstart){
+          if(is.null(prev_start)){
+                starts[[istart]] <- runif(nparam, -2., .2)
+              } else {
+                starts[[istart]] <- prev_start + runif(nparam, -1, 1)*prev_start*.2
+              }
+          occfit[[paste0("f",istart)]] <- try(occu(formula(paste(detformula, occformula, sep="")),
+                                            starts = starts[[istart]],
+                                           dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
+        }}
 
-      aics <- rep(NA, length(occfit))
+      aicsk <- rep(NA, length(occfit))
       for(i in 1:length(occfit)){
         if(class(occfit[[i]])[1] =="try-error" ||
            class(try(unmarked::vcov(occfit[[i]]), silent = TRUE))[1] == "try-error" ||
            min(diag(unmarked::vcov(occfit[[i]]))) < 0 ||
            min(eigen(unmarked::vcov(occfit[[i]], type="state"))$values) < 0){
           #occfit[[i]] <- NULL
-          aics[i] <- NA
+          aicsk[i] <- NA
         } else {
-          aics[i] <- occfit[[i]]@AIC
+          aicsk[i] <- occfit[[i]]@AIC
         }
       }
-      # If null for all 3 starts tried then skip this year
-      if(all(is.na(aics))) next()
+      # If null for all starts tried then skip this year
+      if(all(is.na(aicsk))) next()
       # Save the best model in terms of aic
-      best <- which(aics == min(aics, na.rm=TRUE)[1])
+      best <- which(aicsk == min(aicsk, na.rm=TRUE)[1])
       occfit <- occfit[[best]]
       beststarts <- starts[[best]]
-    } else {
-      best <- 1
-      if(!is.null(prev_start)){
-        time <- system.time(occfit <- try(occu(formula(paste(detformula, occformula, sep="")),
-                                               starts = prev_start,
-                                               dataf, control=list(maxit=1000)), silent=TRUE))
 
-      } else {
-        time <- system.time(occfit <- try(occu(formula(paste(detformula, occformula, sep="")),
-                                               dataf, control=list(maxit=1000)), silent=TRUE))
-      }
+      aicsk <- data.frame(Year = kyear, start = 1:nstart, AIC = aicsk)
+      aics <- rbind(aics, aicsk)
 
-      if(class(occfit)[1] =="try-error" ||
-         class(try(unmarked::vcov(occfit), silent = TRUE))[1] == "try-error" ||
-         min(diag(unmarked::vcov(occfit))) < 0 ||
-         min(eigen(unmarked::vcov(occfit, type="state"))$values) < 0){
-        best <- 2
-        time <- system.time(occfit <- try(occu(formula(paste(detformula, occformula, sep="")), dataf,
-                                               starts=rep(-1,length(attr(terms(formula(occformula)),"term.labels"))+
-                                                            length(attr(terms(formula(detformula)),"term.labels"))+2),
-                                               control=list(maxit=1000)), silent=TRUE))
 
-        if(class(occfit)[1] =="try-error" ||
-           class(try(unmarked::vcov(occfit), silent = TRUE))[1] == "try-error" ||
-           min(diag(unmarked::vcov(occfit))) < 0 ||
-           min(eigen(unmarked::vcov(occfit, type="state"))$values) < 0){
-          occfit <- NULL
-        }
-      }
-
-    }
     # Error checking
     #==================================================================
 
@@ -248,7 +224,6 @@ fit_occ <- function(spp,
         `logit` <- function(x){ log(x/(1-x)) }
 
         z1 <- data.frame(Year = kyear,
-                         #Time = ifelse(multistart, time[[best]][3],time[3]),
                          psi = plogis(unmarked::coef(occfit)[1]),
                          psiA = I,
                          psiA_L = plogis(logit(I) - 1.96*sqrt(psi_var_logit)),
@@ -262,7 +237,14 @@ fit_occ <- function(spp,
                          nSquares = length(unique(subset(obdatak, Species == spp)$Gridref)),
                          month_min = month1,
                          month_max = month2,
-                         best=best)
+                         nstart = nstart,
+                         beststart=best,
+                         nstartNA = sum(is.na(aicsk$AIC)),
+                         naic = uniqueN(round(aicsk[!is.na(aicsk$AIC),]$AIC, 1)),
+                         irun = irun)
+
+        if(!is.null(irun))
+            z1$irun <- irun
 
         z <- rbind(z, z1)
 
@@ -271,6 +253,7 @@ fit_occ <- function(spp,
                                          Est = unmarked::coef(occfit),
                                          SE = SE(occfit),
                                          starts = beststarts))
+
         #setDT(coefs)
         #coefsm <- coefs[, .(Est = mean(Est)), by = Coef]
         #prev_start <- coefsm$Est
@@ -291,7 +274,11 @@ fit_occ <- function(spp,
                   minyear = minyear,
                   maxyear = maxyear,
                   months = months,
-                  qval=qval)
+                  qval=qval,
+                  nstart = nstart,
+                  aics = aics)
+    if(!is.null(irun))
+      results$irun <- irun
   } else {
     z <- rbind(prev_output$Index[!prev_output$Index$Year %in% years,], z)
 
@@ -305,7 +292,8 @@ fit_occ <- function(spp,
                     minyear = minyear,
                     maxyear = maxyear,
                     months = months,
-                    qval=qval)
+                    qval=qval,
+                    irun = NULL)
 
   }
 

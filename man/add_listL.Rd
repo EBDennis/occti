@@ -6,9 +6,6 @@
 \usage{
 add_listL(obdata)
 }
-\arguments{
-\item{obdata}{Data frame containing species occurrence records with the following columns: Species, Date, Gridref, Year, Week, Month, and optionally covnames (see below) and listL}
-}
 \description{
 Add column for list lengths to the data
 }
