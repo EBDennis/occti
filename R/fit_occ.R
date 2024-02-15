@@ -8,7 +8,14 @@
 #'@param minyear First year of interest
 #'@param maxyear Last year of interest
 #'@param trendyears Vector of start years for trend estimation. If \code{trendyears = NULL} then no trends will be calculated.
-#'@param outputdir Directory for output files
+#'@param nstart Number of starting values to run. Default \code{nstart = 3}.
+#'@param allsites Optional data frame of sites for which the occupancy index will be calculated for.
+#'@param qval Quantile value to filter records to months where the species was observed. Default \code{qval = 0.025}.
+#'@param prev_start Provide starting values e.g. based on outputs of a previous run.
+#'@param outputdir Optional directory to save output files to.
+#'@param printprogress Print the progress of the run (only available for non-parallel option)
+#'@param engine Choose the engine used by unmarked.
+#'@param prev_output Previous output to append.
 #'@return A list containing various outputs
 #'@import data.table
 #'@import unmarked
@@ -20,20 +27,18 @@ fit_occ <- function(spp,
                     occformula = "~North+I(North^2)+East+I(East^2)",
                     detformula = "~logLL+SEAS",
                     covnames = c("East","North"),
-                    years = NULL,
                     minyear = NULL,
                     maxyear = NULL,
                     trendyears = NULL,
-                    allsites = NULL,
-                    qu = FALSE,
-                    qval = NULL,
-                    outputdir = NULL,
                     nstart = 1,
-                    printprogress = FALSE,
+                    allsites = NULL,
+                    qval = NULL,
                     prev_start = NULL,
+                    outputdir = NULL,
+                    printprogress = FALSE,
                     engine = engine,
-                    prev_output = NULL){
-  #cat(spp,"at",base::date(),"\n", file=if(parallel){paste("./Logs/",spp,"_",minyear,"_",maxyear,"_log",res,".txt",sep="")}else{""}, append=TRUE)
+                    prev_output = NULL,
+                    irun = 0){
 
   # Satisfy not finding global variable
   Year <- Species <- Week <- N <- NULL
@@ -47,13 +52,13 @@ fit_occ <- function(spp,
   if(!("listL" %in% colnames(obdata))) obdata <- add_listL(obdata)
 
   if(is.null(allsites)) # allsites <- unique(select(obdata, c("Gridref", covnames)))
-    allsites <- unique(obdata[,c("Gridref",covnames), with=FALSE])
+    allsites <- unique(obdata[, c("Gridref", covnames), with=FALSE])
 
   st1 <- Sys.time()
   # Data prep
   #==================================================================
-  obdata <- filter(obdata, Year %in%  minyear:maxyear)
-  #obdata <- obdata[Year %in%  minyear:maxyear]
+  #obdata <- filter(obdata, Year %in%  minyear:maxyear)
+  obdata <- obdata[obdata$Year %in%  minyear:maxyear,]
 
   # Calculate seasonal variation across years
   obdata_sp <- filter(obdata, Species == spp)
@@ -72,11 +77,9 @@ fit_occ <- function(spp,
 
   # Loop over years
   #==================================================================
-  if(is.null(years))  years <- sort(unique(obdata[obdata$Species == spp,]$Year))
-  #years <- sort(unique(obdata[Species == spp]$Year))
+  years <- sort(unique(obdata[obdata$Species == spp,]$Year))
   months <- coefs <- z <- aics <- NULL
   for(kyear in  rev(years)){
-    #for(kyear in  c(rev(head(years,-1)),tail(years,1))){
     m <- 0
     if(printprogress)cat(spp,"for",kyear,"at",base::date(),"\n")
 
@@ -130,6 +133,8 @@ fit_occ <- function(spp,
     obdatak1tPw <- do.call(plyr::rbind.fill.matrix, plyr::dlply(obdatak1,
                                                                 "Gridref", function(a){matrix(a$N, nrow=1)}))
     obdatak1tEN <- unique(obdatak1[,c("Gridref", covnames), with=FALSE])
+
+    obdatak1tEN$Gridref <- as.factor(obdatak1tEN$Gridref)
 
     # Reduce max no. visits to 50
     if(ncol(obdatak1t) > 50){
@@ -235,7 +240,11 @@ fit_occ <- function(spp,
                          nstart = nstart,
                          beststart=best,
                          nstartNA = sum(is.na(aicsk$AIC)),
-                         naic = uniqueN(round(aicsk[!is.na(aicsk$AIC),]$AIC, 1)))
+                         naic = uniqueN(round(aicsk[!is.na(aicsk$AIC),]$AIC, 1)),
+                         irun = irun)
+
+        if(!is.null(irun))
+            z$irun <- irun
 
         z <- rbind(z, z1)
 
@@ -268,6 +277,8 @@ fit_occ <- function(spp,
                   qval=qval,
                   nstart = nstart,
                   aics = aics)
+    if(!is.null(irun))
+      reusults$irun <- irun
   } else {
     z <- rbind(prev_output$Index[!prev_output$Index$Year %in% years,], z)
 
@@ -281,7 +292,8 @@ fit_occ <- function(spp,
                     minyear = minyear,
                     maxyear = maxyear,
                     months = months,
-                    qval=qval)
+                    qval=qval,
+                    irun = NULL)
 
   }
 
