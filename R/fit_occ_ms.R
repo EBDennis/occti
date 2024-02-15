@@ -8,10 +8,17 @@
 #'@param covnames Vector of covariate names in obdata
 #'@param parallel Logical. Whether to run multiple species in parallel. Default is \code{FALSE}.
 #'@param cpus Optional specification for the number of cpus when \code{parallel = TRUE}. Otherwise chosen based on cores available and the number of species.
-#'@param minyear First year of interest
-#'@param maxyear Last year of interest
+#'@param seed Option random seed value to set
+#'@param minyear Optional filter to first year of interest
+#'@param maxyear Optional filter to last year of interest
 #'@param trendyears Vector of start years for trend estimation. If \code{trendyears = NULL} then no trends will be calculated.
-#'@param outputdir Directory for output files
+#'@param nstart Number of starting values to run. Default \code{nstart = 3}.
+#'@param allsites Optional data frame of sites for which the occupancy index will be calculated for.
+#'@param qval Quantile value to filter records to months where the species was observed. Default \code{qval = 0.025}.
+#'@param prev_start Provide starting values e.g. based on outputs of a previous run.
+#'@param outputdir Optional directory to save output files to.
+#'@param printprogress print the progress of the run (only available for non-parallel option)
+#'@param engine Choose the engine used by unmarked.
 #'@return A list containing various outputs
 #'@import data.table
 #'@import parallel
@@ -25,18 +32,17 @@ fit_occ_ms <- function(ispp,
                       covnames = c("East","North"),
                       parallel = FALSE,
                       cpus = NULL,
+                      seed = NULL,
                       minyear = NULL,
                       maxyear = NULL,
                       trendyears = NULL,
+                      nstart = 3,
                       allsites = NULL,
-                      qu=FALSE,
-                      qval=NULL,
-                      outputdir = NULL,
-                      nstart=1,
-                      printprogress=FALSE,
+                      qval = 0.025,
                       prev_start = NULL,
-                      engine = "R",
-                      seed = 123)
+                      outputdir = NULL,
+                      printprogress = FALSE,
+                      engine = "C")
 {
 
     if(parallel){
@@ -54,7 +60,7 @@ fit_occ_ms <- function(ispp,
 
     st1 <- Sys.time()
     if(!parallel){
-      set.seed(seed)
+      if(!is.null(seed)) set.seed(seed)
       outputp <- list()
       for(spp in ispp){
           cat("Starting ", spp," at ", base::date(),"\n")
@@ -67,7 +73,7 @@ fit_occ_ms <- function(ispp,
                                       maxyear = maxyear,
                                       trendyears = trendyears,
                                       allsites = allsites,
-                                      qu=qu, qval=qval,
+                                      qval=qval,
                                       nstart = nstart,
                                       printprogress = printprogress,
                                       prev_start = prev_start,
@@ -84,7 +90,9 @@ fit_occ_ms <- function(ispp,
       invisible(clusterEvalQ(cl, library(MASS)))
       clusterExport(cl, list("fit_trend"),envir=environment())
       # Set random (reproducible) seed
-      parallel::clusterSetRNGStream(cl, seed)
+      if(!is.null(seed))
+          parallel::clusterSetRNGStream(cl, seed)
+
       outputp <- parallel::clusterApplyLB(cl,
                                               ispp,
                                               fit_occ,
@@ -98,7 +106,7 @@ fit_occ_ms <- function(ispp,
                                               allsites = allsites,
                                               outputdir = outputdir,
                                               nstart = nstart,
-                                              qu=qu,qval=qval,
+                                              qval=qval,
                                               prev_start = prev_start,
                                               engine = engine)
       on.exit(parallel::stopCluster(cl))
