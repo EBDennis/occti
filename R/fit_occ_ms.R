@@ -35,7 +35,8 @@ fit_occ_ms <- function(ispp,
                       nstart=1,
                       printprogress=FALSE,
                       prev_start = NULL,
-                      engine = "R")
+                      engine = "R",
+                      seed = 123)
 {
 
     if(parallel){
@@ -53,6 +54,7 @@ fit_occ_ms <- function(ispp,
 
     st1 <- Sys.time()
     if(!parallel){
+      set.seed(seed)
       outputp <- list()
       for(spp in ispp){
           cat("Starting ", spp," at ", base::date(),"\n")
@@ -75,7 +77,6 @@ fit_occ_ms <- function(ispp,
     } else {
       # Set up the cluster
       cl <- parallel::makeCluster(cpus, outfile="")
-      #invisible(clusterEvalQ(cl, library(ggplot2)))
       invisible(clusterEvalQ(cl, library(data.table)))
       invisible(clusterEvalQ(cl, library(unmarked)))
       invisible(clusterEvalQ(cl, library(plyr)))
@@ -83,7 +84,7 @@ fit_occ_ms <- function(ispp,
       invisible(clusterEvalQ(cl, library(MASS)))
       clusterExport(cl, list("fit_trend"),envir=environment())
       # Set random (reproducible) seed
-      parallel::clusterSetRNGStream(cl, 1)
+      parallel::clusterSetRNGStream(cl, seed)
       outputp <- parallel::clusterApplyLB(cl,
                                               ispp,
                                               fit_occ,
