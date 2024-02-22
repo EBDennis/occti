@@ -167,9 +167,15 @@ fit_occ <- function(spp,
           if(is.null(prev_start)){
                 starts[[istart]] <- runif(nparam, -2., .2)
               } else {
-                starts[[istart]] <- prev_start + runif(nparam, -1, 1)*prev_start*.2
+                # First test a random start
+                if(istart == 2){
+                  starts[[istart]] <- rep(0, nparam)
+                } else {
+                # Then slight alternatives to prev_start
+                  starts[[istart]] <- prev_start + runif(nparam, -1, 1)*prev_start*.2
+                }
               }
-          occfit[[paste0("f",istart)]] <- try(occu(formula(paste(detformula, occformula, sep="")),
+          occfit[[paste0("f", istart)]] <- try(occu(formula(paste(detformula, occformula, sep="")),
                                             starts = starts[[istart]],
                                            dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
         }}
