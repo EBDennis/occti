@@ -21,24 +21,26 @@
 #'@import unmarked
 #'@export
 
-# Fit occupancy models
+
+# Fit occupancy models with "regional" factor
 fit_occ <- function(spp,
-                    obdata,
-                    occformula = "~North+I(North^2)+East+I(East^2)",
-                    detformula = "~logLL+SEAS",
-                    covnames = c("East","North"),
-                    minyear = NULL,
-                    maxyear = NULL,
-                    trendyears = NULL,
-                    nstart = 1,
-                    allsites = NULL,
-                    qval = NULL,
-                    prev_start = NULL,
-                    outputdir = NULL,
-                    printprogress = FALSE,
-                    engine = engine,
-                    prev_output = NULL,
-                    irun = 0){
+                     obdata,
+                     occformula = "~North+I(North^2)+East+I(East^2)",
+                     detformula = "~logLL+SEAS",
+                     covnames = c("East","North"),
+                     regionalise = NULL,
+                     minyear = NULL,
+                     maxyear = NULL,
+                     trendyears = NULL,
+                     nstart = 1,
+                     allsites = NULL,
+                     qval = NULL,
+                     prev_start = NULL,
+                     outputdir = NULL,
+                     printprogress = FALSE,
+                     engine = "C",
+                     prev_output = NULL,
+                     irun = 0){
 
   # Satisfy not finding global variable
   Year <- Species <- Week <- N <- NULL
@@ -51,13 +53,19 @@ fit_occ <- function(spp,
   # Add a column for list length is needed
   if(!("listL" %in% colnames(obdata))) obdata <- add_listL(obdata)
 
-  if(is.null(allsites)) # allsites <- unique(select(obdata, c("Gridref", covnames)))
-    allsites <- unique(obdata[, c("Gridref", covnames), with=FALSE])
+  if(!is.null(regionalise) && !(regionalise %in% covnames))
+    covnames <- c(covnames, regionalise)
+
+  if(is.null(allsites))
+    # allsites <- unique(select(obdata,
+    #                             c("Gridref",
+    #                               if(!is.null(regionalise)) regionalise,
+    #                                       covnames)))
+    allsites <- unique(obdata[, c("Gridref", covnames), with = FALSE])
 
   st1 <- Sys.time()
   # Data prep
   #==================================================================
-  #obdata <- filter(obdata, Year %in%  minyear:maxyear)
   obdata <- obdata[obdata$Year %in%  minyear:maxyear,]
 
   # Calculate seasonal variation across years
@@ -78,14 +86,15 @@ fit_occ <- function(spp,
   # Loop over years
   #==================================================================
   years <- sort(unique(obdata[obdata$Species == spp,]$Year))
+  #years <- sort(unique(obdata[Species == spp]$Year))
   months <- coefs <- z <- aics <- NULL
   for(kyear in  rev(years)){
+    #for(kyear in  c(rev(head(years,-1)),tail(years,1))){
     m <- 0
     if(printprogress)cat(spp,"for",kyear,"at",base::date(),"\n")
 
     if("Year" %in% colnames(allsites)){
       allsitesk <- filter(allsites, Year == kyear)
-      #allsitesk <- allsites[Year == kyear]
     } else {
       allsitesk <- allsites}
 
@@ -98,16 +107,17 @@ fit_occ <- function(spp,
 
     # Limit to species months
     month1 <- if(is.null(qval)){
-                    min(obdatak[obdatak$Species == spp,]$Month)
-                   } else {
-                    floor(quantile(obdatak[obdatak$Species == spp,]$Month, qval))
-                     }
+      min(obdatak[obdatak$Species == spp,]$Month)
+    } else {
+      floor(quantile(obdatak[obdatak$Species == spp,]$Month, qval))
+    }
     month2 <- if(is.null(qval)){
-                    max(obdatak[obdatak$Species == spp,]$Month)
-                   } else {
-                    ceiling(quantile(obdatak[obdatak$Species == spp,]$Month, 1 - qval))
-                     }
-  months <- rbind(months, data.frame(Year=kyear,
+      max(obdatak[obdatak$Species == spp,]$Month)
+    } else {
+      ceiling(quantile(obdatak[obdatak$Species == spp,]$Month, 1 - qval))
+    }
+
+    months <- rbind(months, data.frame(Year=kyear,
                                        min=month1,
                                        max=month2))
     obdatak <- obdatak[obdatak$Month %in% month1:month2,]
@@ -136,6 +146,7 @@ fit_occ <- function(spp,
 
     obdatak1tEN$Gridref <- as.factor(obdatak1tEN$Gridref)
 
+
     # Reduce max no. visits to 50
     if(ncol(obdatak1t) > 50){
       obdatak1t <- obdatak1t[,1:50]
@@ -145,115 +156,168 @@ fit_occ <- function(spp,
 
     # Data set up
     dataf <- unmarkedFrameOccu(obdatak1t,
-                               obsCovs = list(logLL=log(obdatak1tL), SEAS=obdatak1tPw),
+                               obsCovs = list(logLL = log(obdatak1tL),
+                                              SEAS = obdatak1tPw),
                                siteCovs = obdatak1tEN)
 
+    if(!is.null(regionalise))
+      occformula <- paste(occformula, "+", regionalise)
+
     # Fit occupancy model
-    # if(multistart){
+
     occfit <- starts <- list()
     nparam <- length(attr(terms(formula(occformula)),"term.labels"))+
-    length(attr(terms(formula(detformula)),"term.labels"))+2
+      length(attr(terms(formula(detformula)),"term.labels"))+2
+    if(!is.null(regionalise))
+      nparam <- nparam + uniqueN(obdatak1tEN[, get(regionalise)])-2
+
     if(is.null(prev_start)){
-        # If starting values not provided then try zeros and two other random starts
-             starts[[1]] <- rep(0, nparam)
-          } else {
-             starts[[1]] <- prev_start
-          }
-        occfit[["f1"]] <- try(occu(formula(paste(detformula, occformula, sep="")),
-                                   starts = starts[[1]],
-                                   dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-      if(nstart > 1){
-        for(istart in 2:nstart){
-          if(is.null(prev_start)){
-                starts[[istart]] <- runif(nparam, -2., .2)
-              } else {
-                starts[[istart]] <- prev_start + runif(nparam, -1, 1)*prev_start*.2
-              }
-          occfit[[paste0("f",istart)]] <- try(occu(formula(paste(detformula, occformula, sep="")),
-                                            starts = starts[[istart]],
-                                           dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
-        }}
-
-      aicsk <- rep(NA, length(occfit))
-      for(i in 1:length(occfit)){
-        if(class(occfit[[i]])[1] =="try-error" ||
-           class(try(unmarked::vcov(occfit[[i]]), silent = TRUE))[1] == "try-error" ||
-           min(diag(unmarked::vcov(occfit[[i]]))) < 0 ||
-           min(eigen(unmarked::vcov(occfit[[i]], type="state"))$values) < 0){
-          #occfit[[i]] <- NULL
-          aicsk[i] <- NA
+      # If starting values not provided then try zeros and two other random starts
+      starts[[1]] <- rep(0, nparam)
+    } else {
+      starts[[1]] <- prev_start
+    }
+    occfit[["f1"]] <- try(occu(formula(paste(detformula, occformula, sep="")),
+                               starts = starts[[1]],
+                               dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
+    if(nstart > 1){
+      for(istart in 2:nstart){
+        if(is.null(prev_start)){
+          starts[[istart]] <- runif(nparam, -2., .2)
         } else {
-          aicsk[i] <- occfit[[i]]@AIC
+          # First test a random start
+          if(istart == 2){
+            starts[[istart]] <- rep(0, nparam)
+          } else {
+            # Then slight alternatives to prev_start
+            starts[[istart]] <- prev_start + runif(nparam, -1, 1)*prev_start*.2
+          }
         }
-      }
-      # If null for all starts tried then skip this year
-      if(all(is.na(aicsk))) next()
-      # Save the best model in terms of aic
-      best <- which(aicsk == min(aicsk, na.rm=TRUE)[1])
-      occfit <- occfit[[best]]
-      beststarts <- starts[[best]]
+        occfit[[paste0("f", istart)]] <- try(occu(formula(paste(detformula, occformula, sep="")),
+                                                  starts = starts[[istart]],
+                                                  dataf, control=list(maxit=1000), engine = engine), silent=TRUE)
+      }}
 
-      aicsk <- data.frame(Year = kyear, start = 1:nstart, AIC = aicsk)
-      aics <- rbind(aics, aicsk)
+    aicsk <- rep(NA, length(occfit))
+    for(i in 1:length(occfit)){
+      if(class(occfit[[i]])[1] =="try-error" ||
+         class(try(unmarked::vcov(occfit[[i]]), silent = TRUE))[1] == "try-error" ||
+         min(diag(unmarked::vcov(occfit[[i]]))) < 0 ||
+         min(eigen(unmarked::vcov(occfit[[i]], type="state"))$values) < 0){
+        #occfit[[i]] <- NULL
+        aicsk[i] <- NA
+      } else {
+        aicsk[i] <- occfit[[i]]@AIC
+      }
+    }
+    # If null for all starts tried then skip this year
+    if(all(is.na(aicsk))) next()
+    # Save the best model in terms of aic
+    best <- which(aicsk == min(aicsk, na.rm=TRUE)[1])
+    occfit <- occfit[[best]]
+    beststarts <- starts[[best]]
+
+    aicsk <- data.frame(Year = kyear, start = 1:nstart, AIC = aicsk)
+    aics <- rbind(aics, aicsk)
+
+
 
 
     # Error checking
     #==================================================================
+    `logit` <- function(x){ log(x/(1-x)) }
 
     if(is.null(occfit)) next()
-    if(class(occfit)[1] != "try-error" && min(diag(unmarked::vcov(occfit))) > 0){
+    if(class(occfit) != "try-error" && min(diag(unmarked::vcov(occfit))) > 0){
       prev_start <- unmarked::coef(occfit)
       if(min(eigen(unmarked::vcov(occfit, type="state"))$values)>=0){
         # Estimate index and standard error
         #==================================================================
+
+        # Calculate index for all squares
         stateformula <- as.formula(paste("~", occfit@formula[3], sep=""))
         X <- model.matrix(stateformula, model.frame(stateformula, allsitesk))
-        y <-  c(X %*% unmarked::coef(occfit, "state"))
-        test <- plogis(y)
+        y <-  c(X %*% unmarked::coef(occfit, "state")) # occupancy estimate for each square on logit scale
+        psivals <- plogis(y) # occupancy probability for each square
+        # Use delta method to get SE
         dgdy <- plogis(y)/(1+exp(y)) #  exp(y)/(1+exp(y))^2
         dBeta <- X*dgdy
-        mean_dBeta <- colMeans(dBeta, na.rm=TRUE)
-        psi_var <- mean_dBeta %*% unmarked::vcov(occfit, type="state") %*% mean_dBeta
-        psi_sd <- sqrt(psi_var)
+
+        if(is.null(regionalise)){
+          # Need mean per region
+          mean_dBeta <- colMeans(dBeta, na.rm=TRUE)
+          # Calculate variance for occupancy index psiA
+          psi_var <- mean_dBeta %*% unmarked::vcov(occfit, type="state") %*% mean_dBeta
+          # SD for occupancy index psiA
+          psi_sd <- sqrt(psi_var)
+
+          # Get variance of logit of the index (for producing bounded CI for the occupancy index)
+          I <- mean(psivals, na.rm=TRUE)
+          mean_dBeta2 <- (1/I + 1/(1-I))*mean_dBeta
+          psi_var_logit <- mean_dBeta2 %*% unmarked::vcov(occfit, type="state") %*% mean_dBeta2
+
+          z1 <- data.frame(Year = kyear,
+                           psi = plogis(unmarked::coef(occfit)[1]),
+                           psiA = I,
+                           psiA_L = plogis(logit(I) - 1.96*sqrt(psi_var_logit)),
+                           psiA_U = plogis(logit(I) + 1.96*sqrt(psi_var_logit)),
+                           psiA_Lunbounded = I - 1.96*psi_sd,
+                           psiA_Uunbounded = I + 1.96*psi_sd,
+                           psiA_SD = psi_sd,
+                           psiA_SDb = sqrt(psi_var_logit),
+                           AIC = occfit@AIC,
+                           nRecords = nrow(subset(obdatak, Species == spp)),
+                           nSquares = length(unique(subset(obdatak, Species == spp)$Gridref)),
+                           month_min = month1,
+                           month_max = month2,
+                           best=best)
+
+          z <- rbind(z, z1)
+        }
+
+        # Calculate index by defined "region"
+        if(!is.null(regionalise)){
+          # Calculate index for all squares
+          allsitespsi <- allsitesk
+          allsitespsi$y <- y
+          setnames(allsitespsi, c("East","North"), c("Eastcov","Northcov"))
+          allsitespsi[, psiA := plogis(y)]
+          dBeta_df <- data.frame(dBeta)
+          dBeta_cols1 <- names(dBeta_df)
+          dBeta_cols <- c(regionalise, "psiA", names(dBeta_df))
+          allsitespsi <- cbind(allsitespsi, dBeta_df)
+
+          mean_dBetaR <- allsitespsi[,..dBeta_cols][, lapply(.SD, mean), by = regionalise]
+          temp_func <- function(x){x %*% unmarked::vcov(occfit, type="state") %*% x}
+          mean_dBetaR$psi_var <- apply(mean_dBetaR[,..dBeta_cols1], 1, temp_func)
+          mean_dBetaR[, psi_sd := sqrt(psi_var)]
+
+          mean_dBetaR2 <- cbind(mean_dBetaR[,.(get(regionalise), psiA)],
+                                (1/mean_dBetaR[, psiA] + 1/(1-mean_dBetaR[, psiA]))*mean_dBetaR[,..dBeta_cols1])
+          mean_dBetaR$psi_var_logit <- apply(mean_dBetaR2[,..dBeta_cols1], 1, temp_func)
+
+          # Summarise what we need only
+          zR <- mean_dBetaR[,.(regionalise = get(regionalise), psiA,  psi_sd, psi_var_logit)]
+          setnames(zR, "regionalise", regionalise)
+          zR[, Year := kyear]
+          zR[, psiA_L := plogis(logit(psiA) - 1.96*sqrt(psi_var_logit))]
+          zR[, psiA_U := plogis(logit(psiA) + 1.96*sqrt(psi_var_logit))]
+          setnames(zR, c("psi_sd","psi_var_logit"), c("psiA_SD","psiA_SDb"))
+          zR <- merge(zR, obdatak[Species == spp, .(nRecords = .N,
+                                                    nSquares = uniqueN(Gridref)), by = regionalise])
 
 
-        I <- mean(test, na.rm=TRUE)
-        mean_dBeta2 <- (1/I + 1/(1-I))*mean_dBeta
-        psi_var_logit <- mean_dBeta2 %*% unmarked::vcov(occfit, type="state") %*% mean_dBeta2
+          z <- rbind(z, zR)
+        }
 
-        `logit` <- function(x){ log(x/(1-x)) }
+        ######
 
-        z1 <- data.frame(Year = kyear,
-                         psi = plogis(unmarked::coef(occfit)[1]),
-                         psiA = I,
-                         psiA_L = plogis(logit(I) - 1.96*sqrt(psi_var_logit)),
-                         psiA_U = plogis(logit(I) + 1.96*sqrt(psi_var_logit)),
-                         psiA_Lunbounded = I - 1.96*psi_sd,
-                         psiA_Uunbounded = I + 1.96*psi_sd,
-                         psiA_SD = psi_sd,
-                         psiA_SDb = sqrt(psi_var_logit),
-                         AIC = occfit@AIC,
-                         nRecords = nrow(subset(obdatak, Species == spp)),
-                         nSquares = length(unique(subset(obdatak, Species == spp)$Gridref)),
-                         month_min = month1,
-                         month_max = month2,
-                         nstart = nstart,
-                         beststart=best,
-                         nstartNA = sum(is.na(aicsk$AIC)),
-                         naic = uniqueN(round(aicsk[!is.na(aicsk$AIC),]$AIC, 1)),
-                         irun = irun)
-
-        if(!is.null(irun))
-            z1$irun <- irun
-
-        z <- rbind(z, z1)
 
         coefs <- rbind(coefs, data.frame(Year = kyear,
                                          Coef = names(unmarked::coef(occfit)),
                                          Est = unmarked::coef(occfit),
                                          SE = SE(occfit),
                                          starts = beststarts))
-
         #setDT(coefs)
         #coefsm <- coefs[, .(Est = mean(Est)), by = Coef]
         #prev_start <- coefsm$Est
@@ -265,20 +329,18 @@ fit_occ <- function(spp,
 
   if(is.null(prev_output)){
     results <- list(Species = spp,
-                  OccModel = occformula,
-                  DetModel = detformula,
-                  Index = z,
-                  Coefs = coefs,
-                  pweek = pweek,
-                  Totaltime = et1 - st1,
-                  minyear = minyear,
-                  maxyear = maxyear,
-                  months = months,
-                  qval=qval,
-                  nstart = nstart,
-                  aics = aics)
-    if(!is.null(irun))
-      results$irun <- irun
+                    OccModel = occformula,
+                    DetModel = detformula,
+                    Index = z,
+                    Coefs = coefs,
+                    pweek = pweek,
+                    Totaltime = et1 - st1,
+                    minyear = minyear,
+                    maxyear = maxyear,
+                    months = months,
+                    qval=qval,
+                    nstart = nstart,
+                    aics = aics)
   } else {
     z <- rbind(prev_output$Index[!prev_output$Index$Year %in% years,], z)
 
@@ -292,7 +354,7 @@ fit_occ <- function(spp,
                     minyear = minyear,
                     maxyear = maxyear,
                     months = months,
-                    qval=qval,
+                    qval = qval,
                     irun = NULL)
 
   }
@@ -301,11 +363,13 @@ fit_occ <- function(spp,
     trends <- do.call(rbind,
                       lapply(trendyears[trendyears >= minyear],
                              fit_trend, z = z, endyear = maxyear))
+
+    results$Trends <- trends
+    results$Trendyears <- trendyears
+
   } else {
     trends <- NULL}
 
-  results$Trends <- trends
-  results$Trendyears <- trendyears
 
   if(!is.null(outputdir))
     saveRDS(results,
@@ -314,8 +378,4 @@ fit_occ <- function(spp,
 
   return(results)
 }
-
-
-
-
 

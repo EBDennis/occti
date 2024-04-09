@@ -31,6 +31,7 @@ fit_occ_ms <- function(splist,
                       occformula = "~North+I(North^2)+East+I(East^2)",
                       detformula = "~logLL+SEAS",
                       covnames = c("East","North"),
+                      regionalise = NULL,
                       parallel = FALSE,
                       cpus = NULL,
                       seed = NULL,
@@ -71,6 +72,7 @@ fit_occ_ms <- function(splist,
                                           occformula = occformula,
                                           detformula = detformula,
                                           covnames = covnames,
+                                          regionalise = regionalise,
                                           minyear = minyear,
                                           maxyear = maxyear,
                                           trendyears = trendyears,
@@ -104,6 +106,7 @@ fit_occ_ms <- function(splist,
                                           occformula = occformula,
                                           detformula = detformula,
                                           covnames = covnames,
+                                          regionalise = regionalise,
                                           minyear = minyear,
                                           maxyear = maxyear,
                                           trendyears = trendyears,
@@ -130,13 +133,10 @@ nrun_wrapper <- function(spp,
     output <- list()
     for(irun in 1:nrun){
       cat("Starting ", spp, " run ", irun, " at ", base::date(), "\n")
-      output[[irun]] <- fit_occ(spp,
-                                irun = irun,
-                                ...)
+      output[[irun]] <- fit_occ(spp, irun = irun, ...)
       }
   } else {
-    output <- fit_occ(spp,
-                      ...)
+      output <- fit_occ(spp, ...)
   }
   return(output)
 }
