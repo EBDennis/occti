@@ -81,7 +81,8 @@ fit_occ_ms <- function(splist,
                                           nstart = nstart,
                                           printprogress = printprogress,
                                           prev_start = prev_start,
-                                          engine = engine)
+                                          engine = engine,
+                                          outputdir = outputdir)
 
           cat("Finishing ", ispp," at ", base::date(),"\n")
         }
@@ -128,16 +129,25 @@ fit_occ_ms <- function(splist,
 # Wrapper function to perform multiple model runs
 nrun_wrapper <- function(spp,
                          nrun,
+                         outputdir,
                          ...){
   if(nrun > 1){
     output <- list()
     for(irun in 1:nrun){
       cat("Starting ", spp, " run ", irun, " at ", base::date(), "\n")
-      output[[irun]] <- fit_occ(spp, irun = irun, ...)
+      output[[irun]] <- fit_occ(spp, ...)
+      output[[irun]]$irun <- irun
       }
   } else {
-      output <- fit_occ(spp, ...)
+      output <- fit_occ(spp,  ...)
   }
+
+  if(!is.null(outputdir))
+    saveRDS(output,
+            file=paste(outputdir,
+                       spp,"_occupancy_output.rds",sep=""))
+
+
   return(output)
 }
 
