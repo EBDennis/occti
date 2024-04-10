@@ -12,7 +12,6 @@
 #'@param allsites Optional data frame of sites for which the occupancy index will be calculated for.
 #'@param qval Quantile value to filter records to months where the species was observed. Default \code{qval = 0.025}.
 #'@param prev_start Provide starting values e.g. based on outputs of a previous run.
-#'@param outputdir Optional directory to save output files to.
 #'@param printprogress Print the progress of the run (only available for non-parallel option)
 #'@param engine Choose the engine used by unmarked.
 #'@param prev_output Previous output to append.
@@ -36,11 +35,9 @@ fit_occ <- function(spp,
                      allsites = NULL,
                      qval = NULL,
                      prev_start = NULL,
-                     outputdir = NULL,
                      printprogress = FALSE,
                      engine = "C",
-                     prev_output = NULL,
-                     irun = 0){
+                     prev_output = NULL){
 
   # Satisfy not finding global variable
   Year <- Species <- Week <- N <- NULL
@@ -354,8 +351,7 @@ fit_occ <- function(spp,
                     minyear = minyear,
                     maxyear = maxyear,
                     months = months,
-                    qval = qval,
-                    irun = NULL)
+                    qval = qval)
 
   }
 
@@ -369,12 +365,6 @@ fit_occ <- function(spp,
 
   } else {
     trends <- NULL}
-
-
-  if(!is.null(outputdir))
-    saveRDS(results,
-            file=paste(outputdir,
-                       spp,"_occupancy_output.rds",sep=""))
 
   return(results)
 }
