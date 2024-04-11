@@ -9,7 +9,7 @@
 #'@param parallel Logical. Whether to run multiple species in parallel. Default is \code{FALSE}.
 #'@param cpus Optional specification for the number of cpus when \code{parallel = TRUE}. Otherwise chosen based on cores available and the number of species.
 #'@param seed Option random seed value to set
-#'@param minyear Optional filter to first year of interest
+#'@param minyear Optional filter to first year of interest. Single value, or dataframe containing values for each species.
 #'@param maxyear Optional filter to last year of interest
 #'@param trendyears Vector of start years for trend estimation. If \code{trendyears = NULL} then no trends will be calculated.
 #'@param nstart Number of starting values to run. Default \code{nstart = 3}.
@@ -66,6 +66,8 @@ fit_occ_ms <- function(splist,
       outputp <- list()
       for(ispp in splist){
         cat("Starting ", ispp," at ", base::date(),"\n")
+
+
           outputp[[ispp]] <- nrun_wrapper(ispp,
                                           nrun,
                                           obdata,

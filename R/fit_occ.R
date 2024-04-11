@@ -47,6 +47,12 @@ fit_occ <- function(spp,
   if(is.null(minyear)) minyear <- min(obdata$Year)
   if(is.null(maxyear)) maxyear <- max(obdata$Year)
 
+  if(!is.null(minyear) & length(minyear) > 1)
+    minyear <- minyear[Species == spp]$startyear
+
+
+
+
   # Add a column for list length is needed
   if(!("listL" %in% colnames(obdata))) obdata <- add_listL(obdata)
 
