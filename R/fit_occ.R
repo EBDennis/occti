@@ -305,7 +305,8 @@ fit_occ <- function(spp,
           zR[, Year := kyear]
           zR[, psiA_L := plogis(logit(psiA) - 1.96*sqrt(psi_var_logit))]
           zR[, psiA_U := plogis(logit(psiA) + 1.96*sqrt(psi_var_logit))]
-          setnames(zR, c("psi_sd","psi_var_logit"), c("psiA_SD","psiA_SDb"))
+          setnames(zR, c("psi_sd","psi_var_logit"), c("psiA_SD","psiA_VARb"))
+          zR[, psiA_SDb := sqrt(psiA_VARb)]
           zR <- merge(zR, obdatak[Species == spp, .(nRecords = .N,
                                                     nSquares = uniqueN(Gridref)), by = regionalise])
 
