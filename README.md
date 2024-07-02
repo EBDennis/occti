@@ -1,5 +1,5 @@
 # occti R package
-R package to produce species' occupancy trends and indices using the unmarked package. Occupancy models are applied separately to each year which are run in reverse order, with starting values informed by the preceding year.
+Under development. R package to produce species' occupancy trends and indices using the unmarked package. Code was developed for applications to UK recording datasets for butterflies and moths. Occupancy models are applied separately to each year which are run in reverse order, with starting values informed by the preceding year.
 
 The approach is based upon: Dennis, E.B., Morgan, B.J.T., Freeman, S.N., Ridout, M.S., Brereton, T.M., Fox, R., Powney, G.D. and Roy, D.B. (2017) Efficient occupancy model-fitting for extensive citizen-science data. _Plos One_, 12(3): e0174433. https://doi.org/10.1371/journal.pone.0174433
 
