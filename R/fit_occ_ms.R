@@ -20,6 +20,7 @@
 #'@param outputdir Optional directory to save output files to.
 #'@param printprogress print the progress of the run (only available for non-parallel option)
 #'@param engine Choose the engine used by unmarked.
+#'@param revyears
 #'@return A list containing various outputs
 #'@import data.table
 #'@import parallel
@@ -45,6 +46,7 @@ fit_occ_ms <- function(splist,
                       prev_start = NULL,
                       outputdir = NULL,
                       printprogress = FALSE,
+                      revyears = TRUE,
                       engine = "C")
 {
 
@@ -84,7 +86,8 @@ fit_occ_ms <- function(splist,
                                           printprogress = printprogress,
                                           prev_start = prev_start,
                                           engine = engine,
-                                          outputdir = outputdir)
+                                          outputdir = outputdir,
+                                          revyears = revyears)
 
           cat("Finishing ", ispp," at ", base::date(),"\n")
         }
@@ -118,7 +121,8 @@ fit_occ_ms <- function(splist,
                                           nstart = nstart,
                                           qval = qval,
                                           prev_start = prev_start,
-                                          engine = engine)
+                                          engine = engine,
+                                          revyears = revyears)
 
       on.exit(parallel::stopCluster(cl))
       names(outputp) <- splist
