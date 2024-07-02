@@ -11,6 +11,7 @@ fit_occ_ms(
   occformula = "~North+I(North^2)+East+I(East^2)",
   detformula = "~logLL+SEAS",
   covnames = c("East", "North"),
+  regionalise = NULL,
   parallel = FALSE,
   cpus = NULL,
   seed = NULL,
@@ -24,6 +25,7 @@ fit_occ_ms(
   prev_start = NULL,
   outputdir = NULL,
   printprogress = FALSE,
+  revyears = TRUE,
   engine = "C"
 )
 }
@@ -44,7 +46,7 @@ fit_occ_ms(
 
 \item{seed}{Option random seed value to set}
 
-\item{minyear}{Optional filter to first year of interest}
+\item{minyear}{Optional filter to first year of interest. Single value, or dataframe containing values for each species.}
 
 \item{maxyear}{Optional filter to last year of interest}
 
