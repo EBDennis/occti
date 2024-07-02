@@ -10,6 +10,7 @@ fit_occ(
   occformula = "~North+I(North^2)+East+I(East^2)",
   detformula = "~logLL+SEAS",
   covnames = c("East", "North"),
+  regionalise = NULL,
   minyear = NULL,
   maxyear = NULL,
   trendyears = NULL,
@@ -17,11 +18,10 @@ fit_occ(
   allsites = NULL,
   qval = NULL,
   prev_start = NULL,
-  outputdir = NULL,
   printprogress = FALSE,
-  engine = engine,
+  engine = "C",
   prev_output = NULL,
-  irun = 0
+  revyears = TRUE
 )
 }
 \arguments{
@@ -48,8 +48,6 @@ fit_occ(
 \item{qval}{Quantile value to filter records to months where the species was observed. Default \code{qval = 0.025}.}
 
 \item{prev_start}{Provide starting values e.g. based on outputs of a previous run.}
-
-\item{outputdir}{Optional directory to save output files to.}
 
 \item{printprogress}{Print the progress of the run (only available for non-parallel option)}
 
