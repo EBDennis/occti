@@ -37,7 +37,8 @@ fit_occ <- function(spp,
                      prev_start = NULL,
                      printprogress = FALSE,
                      engine = "C",
-                     prev_output = NULL){
+                     prev_output = NULL,
+                     revyears = TRUE){
 
   # Satisfy not finding global variable
   Year <- Species <- Week <- N <- NULL
@@ -89,9 +90,11 @@ fit_occ <- function(spp,
   # Loop over years
   #==================================================================
   years <- sort(unique(obdata[obdata$Species == spp,]$Year))
-  #years <- sort(unique(obdata[Species == spp]$Year))
+
+  if(revyears) years <- rev(years)
+
   months <- coefs <- z <- aics <- NULL
-  for(kyear in  rev(years)){
+  for(kyear in years){
     #for(kyear in  c(rev(head(years,-1)),tail(years,1))){
     m <- 0
     if(printprogress)cat(spp,"for",kyear,"at",base::date(),"\n")
