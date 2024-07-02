@@ -4,12 +4,18 @@
 \alias{fit_trend}
 \title{Function to estimate occupancy trends}
 \usage{
-fit_trend(startyear, z, endyear = NULL, predictions = FALSE)
+fit_trend(
+  z,
+  startyear = NULL,
+  endyear = NULL,
+  predictions = FALSE,
+  regionalise = NULL
+)
 }
 \arguments{
-\item{startyear}{First year to calculate the trend from}
-
 \item{z}{Data frame output from \code{fit_occ}, containing estimated occupancy index and standard errors.}
+
+\item{startyear}{Optional. First year to calculate the trend from. Default will select the first year of the index.}
 
 \item{endyear}{Optional. Year to calculate the trend up to. Default will select the last year of the index.}
 
